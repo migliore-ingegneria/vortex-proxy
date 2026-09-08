@@ -9,6 +9,7 @@ description = "Async processing engine for Vortex"
 vortex-core = { path = "../vortex-core" }
 vortex-filters = { path = "../vortex-filters" }
 vortex-admin = { path = "../vortex-admin" }
+vortex-ebpf = { path = "../vortex-ebpf" }
 tokio = { version = "1.0", features = ["full"] }
 hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
@@ -19,6 +20,26 @@ rustls-pemfile = "2.2"
 pki-types = { package = "rustls-pki-types", version = "1.10" }
 crossbeam-queue = "0.3"
 dashmap = "6.0"
+
+# Telemetry
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+tracing-opentelemetry = "0.22"
+opentelemetry = { version = "0.21", features = ["trace"] }
+opentelemetry_sdk = { version = "0.21", features = ["tokio", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.14", features = ["trace", "grpc-tonic", "tokio"] }
+
+# Metrics
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+
+# Memory Allocation (Performance Hardening)
+jemallocator = "0.5"
+core_affinity = "0.8"
+
+# QUIC / HTTP/3
+quinn = "0.11"
+rcgen = "0.13"
 
 [dev-dependencies]
 reqwest = "0.12"
