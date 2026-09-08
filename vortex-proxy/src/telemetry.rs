@@ -60,3 +60,24 @@ pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error + Send + Sync>> 
 
     Ok(())
 }
+
+/// Helper function to format and record telemetry metric logs for proxy ingress traffic.
+pub fn record_proxy_ingress_metric(path: &str, status_code: u16) {
+    tracing::info!(
+        target: "vortex_ingress",
+        path = path,
+        status = status_code,
+        "Ingress request recorded"
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_record_proxy_ingress_metric() {
+        record_proxy_ingress_metric("/api/v1/health", 200);
+        record_proxy_ingress_metric("/api/v1/stream", 404);
+    }
+}
