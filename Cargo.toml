@@ -13,8 +13,10 @@ edition = "2021"
 authors = ["Shubham Gautam <gautamshubham658@gmail.com>"]
 
 [profile.release]
+opt-level = 3
 lto = true
 codegen-units = 1
+panic = "abort"
 
 [workspace.lints.rust]
 missing_docs = "deny"
