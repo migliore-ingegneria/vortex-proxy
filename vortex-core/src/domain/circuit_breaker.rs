@@ -76,4 +76,57 @@ impl CircuitBreaker {
             self.last_failure_time.store(now, Ordering::Relaxed);
         }
     }
+
+    /// Returns the current failure count.
+    pub fn failure_count(&self) -> usize {
+        self.failures.load(Ordering::Relaxed)
+    }
+
+    /// Checks if the circuit breaker is currently in the Open state.
+    pub fn is_open(&self) -> bool {
+        matches!(self.state(), CircuitState::Open)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_circuit_breaker_initial_state_is_closed() {
+        let cb = CircuitBreaker::new();
+        assert_eq!(cb.state(), CircuitState::Closed);
+        assert_eq!(cb.failure_count(), 0);
+        assert!(!cb.is_open());
+    }
+
+    #[test]
+    fn test_circuit_breaker_trips_to_open_after_threshold() {
+        let cb = CircuitBreaker::new();
+
+        for _ in 0..FAILURE_THRESHOLD - 1 {
+            cb.record_failure();
+            assert_eq!(cb.state(), CircuitState::Closed);
+        }
+
+        cb.record_failure();
+        assert_eq!(cb.state(), CircuitState::Open);
+        assert!(cb.is_open());
+        assert_eq!(cb.failure_count(), FAILURE_THRESHOLD);
+    }
+
+    #[test]
+    fn test_circuit_breaker_resets_on_success() {
+        let cb = CircuitBreaker::new();
+
+        for _ in 0..FAILURE_THRESHOLD {
+            cb.record_failure();
+        }
+        assert_eq!(cb.state(), CircuitState::Open);
+
+        cb.record_success();
+        assert_eq!(cb.state(), CircuitState::Closed);
+        assert_eq!(cb.failure_count(), 0);
+        assert!(!cb.is_open());
+    }
 }
