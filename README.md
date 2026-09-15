@@ -313,6 +313,17 @@ VortexProxy interacts with downstream clients through standard HTTP semantics, i
 
 ---
 
+## 📊 Prometheus & OpenTelemetry Monitoring
+
+Vortex exposes native Prometheus metrics on port `9091` and streams W3C distributed traces via OTLP gRPC:
+
+```bash
+# Query Prometheus metrics endpoint
+curl http://localhost:9091/metrics
+```
+
+---
+
 ## 🤝 Contributing
 
 We are actively looking for open-source contributors to help push Vortex to the absolute limits of edge computing!
