@@ -67,4 +67,23 @@ impl XdpRateLimiter for LinuxXdpLimiter {
         }
         Ok(())
     }
+
+    fn is_ip_blocked(&self, ip: IpAddr) -> bool {
+        if let IpAddr::V4(ipv4) = ip {
+            let mut bpf = self.bpf.lock().unwrap();
+            if let Ok(matched_ips) = HashMap::<_, u32, u32>::try_from(bpf.map_mut("BLOCKED_IPS").unwrap()) {
+                let ip_bytes = u32::from_be_bytes(ipv4.octets());
+                return matched_ips.get(&ip_bytes, 0).is_ok();
+            }
+        }
+        false
+    }
+
+    fn blocked_ip_count(&self) -> usize {
+        let mut bpf = self.bpf.lock().unwrap();
+        if let Ok(matched_ips) = HashMap::<_, u32, u32>::try_from(bpf.map_mut("BLOCKED_IPS").unwrap()) {
+            return matched_ips.keys().count();
+        }
+        0
+    }
 }
