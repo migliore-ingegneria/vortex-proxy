@@ -35,6 +35,20 @@ impl BanManager {
         }
     }
 
+    /// Checks whether an IP address is currently actively banned.
+    pub fn is_ip_banned(&self, ip: &IpAddr) -> bool {
+        if let Some(limiter) = &self.limiter {
+            if limiter.is_ip_blocked(*ip) {
+                return true;
+            }
+        }
+        if let Some(exp) = self.banned_ips.get(ip) {
+            *exp.value() > Instant::now()
+        } else {
+            false
+        }
+    }
+
     /// Spawns a background Tokio task to sweep and unban expired IPs.
     pub fn spawn_sweeper(self: Arc<Self>, tick_rate: Duration) {
         if self.limiter.is_none() {
@@ -69,5 +83,37 @@ impl BanManager {
                 });
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vortex_ebpf::mock::MockXdpLimiter;
+
+    #[tokio::test]
+    async fn test_ban_manager_bpf_map_lifecycle_and_sweeper() {
+        let mock_limiter: Arc<dyn XdpRateLimiter> = Arc::new(MockXdpLimiter::new());
+        let ban_manager = Arc::new(BanManager::new(Some(mock_limiter.clone())));
+
+        let target_ip: IpAddr = "203.0.113.42".parse().unwrap();
+
+        // 1. Initial state: not banned
+        assert!(!ban_manager.is_ip_banned(&target_ip));
+        assert!(!mock_limiter.is_ip_blocked(target_ip));
+
+        // 2. Ban IP for short duration
+        ban_manager.ban_ip(target_ip, Duration::from_millis(100));
+        assert!(ban_manager.is_ip_banned(&target_ip));
+        assert!(mock_limiter.is_ip_blocked(target_ip));
+
+        // 3. Spawn sweeper and wait for expiry
+        let manager_clone = ban_manager.clone();
+        manager_clone.spawn_sweeper(Duration::from_millis(20));
+
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        assert!(!ban_manager.is_ip_banned(&target_ip));
+        assert!(!mock_limiter.is_ip_blocked(target_ip));
     }
 }
