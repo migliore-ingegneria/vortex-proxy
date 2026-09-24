@@ -372,6 +372,10 @@ async fn forward_request(
         upstream_addr.to_string().parse().unwrap(),
     );
 
+    // Inject OpenTelemetry W3C distributed trace context headers into upstream request
+    let span_cx = tracing::Span::current().context();
+    crate::telemetry::inject_trace_context(&span_cx, req.headers_mut());
+
     if sender.ready().await.is_err() {
         return Err(Box::from("Failed to prepare connection sender"));
     }

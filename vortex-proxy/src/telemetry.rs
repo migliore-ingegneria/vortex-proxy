@@ -71,6 +71,63 @@ pub fn record_proxy_ingress_metric(path: &str, status_code: u16) {
     );
 }
 
+/// OpenTelemetry header injector implementation for hyper `HeaderMap`.
+pub struct HeaderInjector<'a>(pub &'a mut hyper::HeaderMap);
+
+impl<'a> opentelemetry::propagation::Injector for HeaderInjector<'a> {
+    fn set(&mut self, key: &str, value: String) {
+        if let Ok(name) = hyper::header::HeaderName::from_bytes(key.as_bytes()) {
+            if let Ok(val) = hyper::header::HeaderValue::from_str(&value) {
+                self.0.insert(name, val);
+            }
+        }
+    }
+}
+
+/// Injects W3C trace context headers (`traceparent`, `tracestate`) into an outgoing HTTP header map.
+pub fn inject_trace_context(cx: &opentelemetry::Context, headers: &mut hyper::HeaderMap) {
+    global::get_text_map_propagator(|propagator| {
+        propagator.inject_context(cx, &mut HeaderInjector(headers));
+    });
+}
+
+/// Parsed fields of a W3C `traceparent` header.
+#[derive(Debug, PartialEq, Eq)]
+pub struct W3CTraceParent<'a> {
+    /// W3C trace specification version.
+    pub version: &'a str,
+    /// 16-byte hex trace ID.
+    pub trace_id: &'a str,
+    /// 8-byte hex parent span ID.
+    pub parent_id: &'a str,
+    /// 8-bit trace flags.
+    pub trace_flags: &'a str,
+}
+
+/// Zero-allocation parser for W3C `traceparent` header format: `version-trace_id-parent_id-trace_flags`.
+pub fn parse_w3c_traceparent(header_value: &str) -> Option<W3CTraceParent<'_>> {
+    let mut iter = header_value.split('-');
+    let version = iter.next()?;
+    let trace_id = iter.next()?;
+    let parent_id = iter.next()?;
+    let trace_flags = iter.next()?;
+
+    if iter.next().is_some() {
+        return None;
+    }
+
+    if version.len() != 2 || trace_id.len() != 32 || parent_id.len() != 16 || trace_flags.len() != 2 {
+        return None;
+    }
+
+    Some(W3CTraceParent {
+        version,
+        trace_id,
+        parent_id,
+        trace_flags,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,5 +136,28 @@ mod tests {
     fn test_record_proxy_ingress_metric() {
         record_proxy_ingress_metric("/api/v1/health", 200);
         record_proxy_ingress_metric("/api/v1/stream", 404);
+    }
+
+    #[test]
+    fn test_w3c_traceparent_parsing() {
+        let valid_header = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        let parsed = parse_w3c_traceparent(valid_header).expect("Failed to parse valid traceparent");
+        assert_eq!(parsed.version, "00");
+        assert_eq!(parsed.trace_id, "4bf92f3577b34da6a3ce929d0e0e4736");
+        assert_eq!(parsed.parent_id, "00f067aa0ba902b7");
+        assert_eq!(parsed.trace_flags, "01");
+
+        let invalid_header = "00-short-id-01";
+        assert!(parse_w3c_traceparent(invalid_header).is_none());
+    }
+
+    #[test]
+    fn test_trace_context_injection() {
+        global::set_text_map_propagator(TraceContextPropagator::new());
+        let cx = opentelemetry::Context::new();
+        let mut headers = hyper::HeaderMap::new();
+
+        inject_trace_context(&cx, &mut headers);
+        // TraceContextPropagator injects traceparent if active span exists or context holds valid trace metadata
     }
 }
